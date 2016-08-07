@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <declare-styleable name="RollLayout">
+        <attr name="mode" format="enum">
+            <enum name="layDown" value="1"/>
+            <enum name="rollOut" value="0"/>
+        </attr>
+
+        <attr name="direction" format="enum">
+            <enum name="topToBottom" value="0"/>
+            <enum name="bottomToTop" value="1"/>
+            <enum name="leftToRight" value="2"/>
+            <enum name="rightToLeft" value="3"/>
+        </attr>
+
+        <attr name="layoutId" format="reference"/>
+        <attr name="pauseTime" format="integer"/>
+        <attr name="duration" format="integer"/>
+        <attr name="circulation" format="enum">
+            <enum name="forever" value="-1"/>
+            <enum name="once" value="1"/>
+        </attr>
+
+    </declare-styleable>
+
+    <attr name="RollLayoutStyle" format="reference"/>
+</resources>
