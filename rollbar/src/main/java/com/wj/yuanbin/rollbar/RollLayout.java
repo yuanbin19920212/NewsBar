@@ -10,6 +10,7 @@ import android.util.SparseArray;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.animation.AnimationUtils;
 import android.view.animation.Interpolator;
 import android.view.animation.LinearInterpolator;
 
@@ -79,10 +80,15 @@ public class RollLayout extends ViewGroup{
      */
     public static final int STOP = 3;
     /***
+     * 回复状态
+     */
+    public static final int RESUME = 5;
+    /***
      * 滚动结束
      */
     public static final int END = 4;
 
+    private int[] mStates = new int[]{START,ROLLING,PAUSE,STOP,RESUME,END};
     /***
      * RollLayout 的布局模式
      * 主要分为ROLLOUT 和 LAYDOWN两种
@@ -113,6 +119,13 @@ public class RollLayout extends ViewGroup{
      * mRollView 滚动View
      */
     private View mSurfaceView,mRollView;
+
+    /***
+     * mSurfaceView 和 mRollView 的MarginLayoutParams
+     */
+    private MarginLayoutParams mMarginLayoutParams;
+
+    private int childWidth,childHeight;
 
     /***
      * 中途停顿时间,默认300毫秒
@@ -171,6 +184,57 @@ public class RollLayout extends ViewGroup{
     }
 
     /***
+     * 设置模式
+     * @param mode
+     */
+    public void setMode(int mode){
+        mMode = mode;
+    }
+
+    /***
+     * 设置方向
+     * @param direction
+     */
+    public void setDirection(int direction){
+        mRollDirection = direction;
+        setState(END);
+        setState(START);
+    }
+
+    /**
+     * setPauseTime
+     * @param mPauseTime
+     */
+    public void setPauseTime(int mPauseTime) {
+        this.mPauseTime = mPauseTime;
+    }
+
+    /***
+     * setDuration
+     * @param mDuration
+     */
+    public void setDuration(int mDuration) {
+        this.mDuration = mDuration;
+    }
+
+    /***
+     * setCirculationTimes
+     * @param mCirculationTimes
+     */
+    public void setCirculationTimes(int mCirculationTimes) {
+        this.mCirculationTimes = mCirculationTimes;
+    }
+
+    /**
+     * setCurrentPosition
+     * @param mCurrentPosition
+     */
+    public void setCurrentPosition(int mCurrentPosition) {
+        this.mCurrentPosition = mCurrentPosition;
+        resetSurfaceViewAndRollView();
+    }
+
+    /***
      * init
      * @param context
      * @param attrs
@@ -186,9 +250,11 @@ public class RollLayout extends ViewGroup{
         mDuration = typedArray.getInteger(R.styleable.RollLayout_duration,mDuration);
         mCirculationTimes = typedArray.getInteger(R.styleable.RollLayout_circulation,mCirculationTimes);
         int viewLayoutId = typedArray.getResourceId(R.styleable.RollLayout_layoutId,-1);
+        int interpolatorId = typedArray.getResourceId(R.styleable.RollLayout_interpolator,-1);
         typedArray.recycle();
         if(mCirculationTimes == -1) mCirculationTimes = Integer.MAX_VALUE;
         if (mCirculationTimes == 0) mCirculationTimes = 1;
+        if (interpolatorId != -1)interpolator = AnimationUtils.loadInterpolator(context,interpolatorId);
         if (viewLayoutId == -1){
             throw new IllegalArgumentException("layoutId is -1!");
         }
@@ -200,6 +266,7 @@ public class RollLayout extends ViewGroup{
         inflater.inflate(viewLayoutId,this);
         inflater.inflate(viewLayoutId,this);
         mRollView = getChildAt(0);mSurfaceView=getChildAt(1);
+        mMarginLayoutParams = (MarginLayoutParams)mSurfaceView.getLayoutParams();
 
     }
 
@@ -241,6 +308,34 @@ public class RollLayout extends ViewGroup{
     }
 
     /***
+     *
+     * 获取mSurfaceView rect
+     * @return
+     */
+    private Rect getSurfaceViewRect(int l, int t, int r, int b){
+
+        int width = r - l;int height = b - t;
+
+        int left = getPaddingLeft()+mMarginLayoutParams.leftMargin;
+
+        int top = getPaddingTop()+mMarginLayoutParams.topMargin;
+
+        int right = width-getPaddingRight()-mMarginLayoutParams.rightMargin;
+
+        int bottom = height-getPaddingBottom()-mMarginLayoutParams.bottomMargin;
+
+        if (childWidth !=0 || childHeight != 0) {
+            int right1 = left + childWidth;
+
+            int bottom1 = top + childHeight;
+
+            if (right1 < right) right = right1;
+
+            if (bottom1 < bottom) bottom = bottom1;
+        }
+        return new Rect(left,top,right,bottom);
+    }
+    /***
      * 当mMode 为LAYDOWN
      * @param changed
      * @param l
@@ -249,8 +344,9 @@ public class RollLayout extends ViewGroup{
      * @param b
      */
     private void layoutLayDown(boolean changed, int l, int t, int r, int b){
-        layoutChild(l,t,r,b,mSurfaceView);
-        layoutChild(l,t,r,b,mRollView);
+        Rect rect = getSurfaceViewRect(l,t,r,b);
+        mSurfaceView.layout(rect.left,rect.top,rect.right,rect.bottom);
+        mRollView.layout(rect.left, rect.top, rect.right, rect.bottom);
     }
 
     /***
@@ -263,60 +359,30 @@ public class RollLayout extends ViewGroup{
      */
     private void layoutRollOut(boolean changed, int l, int t, int r, int b){
         /****布局mSurfaceView*****/
-        layoutChild(l,t,r,b,mSurfaceView);
-
+        Rect rect = getSurfaceViewRect(l,t,r,b);
+        mSurfaceView.layout(rect.left, rect.top, rect.right, rect.bottom);
         /****布局mRollView***/
         switch (mRollDirection){
             case TOPTOBOTTOM :
-                layoutChild(l,t-mRollView.getMeasuredHeight(),r,b-mRollView.getMeasuredHeight(),mRollView);
+                mRollView.layout(rect.left,rect.top-childHeight-mMarginLayoutParams.bottomMargin-mMarginLayoutParams.topMargin,
+                        rect.right,rect.bottom-mMarginLayoutParams.bottomMargin-mMarginLayoutParams.topMargin);
                 break;
 
             case BOTTOMTOTOP :
-                layoutChild(l,t+mRollView.getMeasuredHeight(),r,b+mRollView.getMeasuredHeight(),mRollView);
+                mRollView.layout(rect.left,rect.top+childHeight+mMarginLayoutParams.bottomMargin+mMarginLayoutParams.topMargin,
+                        rect.right,rect.bottom+childHeight+mMarginLayoutParams.bottomMargin+mMarginLayoutParams.topMargin);
                 break;
 
             case LEFTTORIGHT :
-                layoutChild(l-mRollView.getMeasuredWidth(),t,r-mRollView.getMeasuredWidth(),b,mRollView);
+                mRollView.layout(rect.left-childWidth-mMarginLayoutParams.leftMargin-mMarginLayoutParams.rightMargin,rect.top,
+                        rect.right-childWidth-mMarginLayoutParams.leftMargin-mMarginLayoutParams.rightMargin,rect.bottom);
                 break;
 
             case RIGHTTOLEFT :
-                layoutChild(l+mRollView.getMeasuredWidth(),t,r+mRollView.getMeasuredWidth(),b,mRollView);
+                mRollView.layout(rect.left+childWidth+mMarginLayoutParams.leftMargin+mMarginLayoutParams.rightMargin,rect.top,
+                        rect.right+childWidth+mMarginLayoutParams.leftMargin+mMarginLayoutParams.rightMargin,rect.bottom);
                 break;
         }
-    }
-
-    /***
-     *布局childView
-     * @param l
-     * @param t
-     * @param r
-     * @param b
-     * @param view
-     */
-    private void layoutChild(int l, int t, int r, int b,View view){
-        if (view == null){
-            throw new NullPointerException("view is null");
-        }
-        MarginLayoutParams marginLayoutParams = (MarginLayoutParams)view.getLayoutParams();
-        int childLeft = l+getPaddingLeft()+marginLayoutParams.leftMargin;
-        int childTop = t+getPaddingTop()+marginLayoutParams.topMargin;
-        int childRight = childLeft+view.getMeasuredWidth()+getPaddingRight()+marginLayoutParams.rightMargin;
-        if (childRight > r) childRight = r-getPaddingRight()-marginLayoutParams.rightMargin;
-        int childBottom = childTop+view.getMeasuredHeight()+getPaddingBottom()+marginLayoutParams.bottomMargin;
-        if (childBottom > b)childBottom = b-getPaddingBottom()-marginLayoutParams.bottomMargin;
-        view.layout(childLeft, childTop, childRight, childBottom);
-    }
-
-    /***
-     *布局childView
-     * @param rect
-     * @param view
-     */
-    private void layoutChild(Rect rect , View view){
-        if (rect == null || rect.isEmpty()){
-            throw new NullPointerException("rect is empty");
-        }
-        layoutChild(rect.left, rect.top, rect.right, rect.bottom, view);
     }
 
     /***
@@ -330,12 +396,16 @@ public class RollLayout extends ViewGroup{
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
 
-        measureChildWithMargins(mSurfaceView,widthMeasureSpec,0,heightMeasureSpec,0);
+        measureChildWithMargins(mSurfaceView, widthMeasureSpec, 0, heightMeasureSpec, 0);
 
-        measureChildWithMargins(mRollView,widthMeasureSpec,0,heightMeasureSpec,0);
+        measureChildWithMargins(mRollView, widthMeasureSpec, 0, heightMeasureSpec, 0);
 
-        setMeasuredDimension(resolveSizeAndState(mSurfaceView.getMeasuredWidth(), widthMeasureSpec, mSurfaceView.getMeasuredState()),
-                resolveSizeAndState(mSurfaceView.getMeasuredHeight(), heightMeasureSpec, mSurfaceView.getMeasuredState()));
+        int leftAndRightSpace = getPaddingLeft()+getPaddingRight() + mMarginLayoutParams.leftMargin+mMarginLayoutParams.rightMargin;
+        int topAndBottomSpace = getPaddingBottom()+getPaddingTop()+mMarginLayoutParams.topMargin+mMarginLayoutParams.bottomMargin;
+
+        childWidth = mSurfaceView.getMeasuredWidth();childHeight = mSurfaceView.getMeasuredHeight();
+        setMeasuredDimension(resolveSizeAndState(mRollView.getMeasuredWidth()+leftAndRightSpace, widthMeasureSpec, mRollView.getMeasuredState()),
+                resolveSizeAndState(mRollView.getMeasuredHeight()+topAndBottomSpace, heightMeasureSpec, mRollView.getMeasuredState()));
     }
 
     /***
@@ -350,15 +420,44 @@ public class RollLayout extends ViewGroup{
         if (rollAdapter.getCount()>1)
         mRollAdapter.getView(mCurrentPosition+1,mRollView);
     }
+
+    /***
+     * start
+     */
+    public void start(){
+        setState(START);
+    }
+
+    /**
+     * stop
+     */
+    public void stop(){
+        setState(STOP);
+    }
+
+    /**
+     * end
+     */
+    public void end(){
+        setState(END);
+    }
+
+    /**
+     * resume
+     */
+    public void resume(){
+        setState(RESUME);
+    }
+
     /***
      * 设置当前滚动状态
      * @param state
      */
-    public void setState(int state){
+    private void setState(int state){
         synchronized (mLock) {
             if (mState != state) {
-                mState = state;
-                Message message = getMessage(mState);
+                //mState = state;
+                Message message = getMessage(state);
                 rollHandler.sendMessage(message);
             }
         }
@@ -412,18 +511,25 @@ public class RollLayout extends ViewGroup{
 
         private int consumeTime;
         private float restMove;
+        private float floatMove;
+        private int beforeStopState;
+        private int totalMove;
 
+        private boolean stop;
         private void reset(){
             consumeTime = 0;
             restMove = 0;
+            floatMove = 0;
+            totalMove = 0;
         }
+
         private void roll(){
+            if (stop) return;
             float g = interpolator.getInterpolation((float)consumeTime/mDuration);
             float g1 = interpolator.getInterpolation((float)(consumeTime+mStepTime)/mDuration);
-
             int move = 0;
             int callMethod = 0;
-            float floatMove = 0;
+            int moveTo;
             boolean rollPause = false;
             switch (mRollDirection){
                 case TOPTOBOTTOM:
@@ -431,8 +537,9 @@ public class RollLayout extends ViewGroup{
                     floatMove = mSurfaceView.getMeasuredHeight()*(g1-g)+restMove;
                     move = (int)floatMove;
                     restMove = floatMove - move;
-                    if (mSurfaceView.getTop()+move >= mSurfaceView.getMeasuredHeight()+getPaddingTop()){
-                        move = mSurfaceView.getMeasuredHeight()+getPaddingTop() - mSurfaceView.getTop();
+                    moveTo = childHeight+mMarginLayoutParams.topMargin+mMarginLayoutParams.bottomMargin;
+                    if (totalMove+move >= moveTo){
+                        move = moveTo - totalMove;
                         restMove = 0;
                         rollPause = true;
                     }
@@ -442,8 +549,9 @@ public class RollLayout extends ViewGroup{
                     floatMove = -mSurfaceView.getMeasuredHeight()*(g1-g)+restMove;
                     move = (int)floatMove;
                     restMove = floatMove - move;
-                    if (mSurfaceView.getTop()+move <= getPaddingTop()-mSurfaceView.getMeasuredHeight()){
-                        move = -mSurfaceView.getMeasuredHeight()+getPaddingTop() - mSurfaceView.getTop();
+                    moveTo = -childHeight-mMarginLayoutParams.topMargin-mMarginLayoutParams.bottomMargin;
+                    if (totalMove+ move <= moveTo){
+                        move = moveTo - totalMove;
                         restMove = 0;
                         rollPause = true;
                     }
@@ -454,8 +562,9 @@ public class RollLayout extends ViewGroup{
                     floatMove = mSurfaceView.getMeasuredWidth()*(g1-g)+restMove;
                     move = (int)floatMove;
                     restMove = floatMove - move;
-                    if (mSurfaceView.getLeft()+move >= getPaddingLeft()+mSurfaceView.getMeasuredWidth()){
-                        move = mSurfaceView.getMeasuredWidth()+getPaddingLeft() - mSurfaceView.getLeft();
+                    moveTo = childWidth+mMarginLayoutParams.leftMargin+mMarginLayoutParams.rightMargin;
+                    if (totalMove+move >= moveTo){
+                        move = moveTo - totalMove;
                         restMove = 0;
                         rollPause = true;
                     }
@@ -465,8 +574,9 @@ public class RollLayout extends ViewGroup{
                     floatMove = -mSurfaceView.getMeasuredWidth()*(g1-g)+restMove;
                     move = (int)floatMove;
                     restMove = floatMove - move;
-                    if (mSurfaceView.getLeft()+move <= getPaddingLeft()-mSurfaceView.getMeasuredWidth()){
-                        move = -mSurfaceView.getMeasuredWidth()+getPaddingLeft() - mSurfaceView.getLeft();
+                    moveTo = -childWidth-mMarginLayoutParams.leftMargin - mMarginLayoutParams.rightMargin;
+                    if (totalMove+move <= moveTo){
+                        move = moveTo - totalMove;
                         restMove = 0;
                         rollPause = true;
                     }
@@ -478,6 +588,7 @@ public class RollLayout extends ViewGroup{
             }else {
                 rollHandler.sendMessageDelayed(getMessage(ROLLING), mStepTime);
                 consumeTime+=mStepTime;
+                totalMove+=move;
             }
         }
 
@@ -487,21 +598,27 @@ public class RollLayout extends ViewGroup{
             switch (msg.what){
                 /**开始滚动**/
                 case START:
+                    mState = START;
+                    resetSurfaceViewAndRollView();
+                    removeOtherStateMessages(START);
                     rollHandler.sendMessageDelayed(getMessage(ROLLING),mPauseTime);
                     break;
                 /***滚动中**/
                 case ROLLING:
+                    mState = ROLLING;
                     roll();
                     break;
                 /***间断***/
                 case PAUSE:
                     reset();
+                    mState = PAUSE;
+                    removeOtherStateMessages(PAUSE);
+                    if (mCurrentPosition+1 >= mRollAdapter.getCount()-1){
+                        mTotalCirculationTimes ++;
+                    }
+                    mCurrentPosition++;
+                    mCurrentPosition %= mRollAdapter.getCount();
                     if (mTotalCirculationTimes < mCirculationTimes){
-                        mCurrentPosition++;
-                        if (mCurrentPosition >= mRollAdapter.getCount()){
-                            mTotalCirculationTimes ++;
-                        }
-                        mCurrentPosition %= mRollAdapter.getCount();
                         resetSurfaceViewAndRollView();
                         rollHandler.sendMessageDelayed(getMessage(ROLLING),mPauseTime);
                     }else {
@@ -510,17 +627,37 @@ public class RollLayout extends ViewGroup{
                     break;
                 /**暂停**/
                 case STOP:
-
+                    removeOtherStateMessages(STOP);
+                    /***保存当前状态***/
+                    beforeStopState = mState;
+                    mState = STOP;
+                    stop = true;
+                    break;
+                case RESUME:
+                    rollHandler.sendMessage(getMessage(beforeStopState));
+                    stop = false;
                     break;
                 /***结束**/
                 case END:
                     reset();
+                    mState = END;
+                    removeOtherStateMessages(END);
                     resetSurfaceViewAndRollView();
                     break;
             }
         }
     };
 
+    /***
+     * 删除message
+     * @param state
+     */
+    private void removeOtherStateMessages(int state){
+        for (int item : mStates){
+            if (state == item)continue;
+            rollHandler.removeMessages(state);
+        }
+    }
     /***
      * Roll数据Adapter
      */
@@ -587,4 +724,5 @@ public class RollLayout extends ViewGroup{
             return (T)view;
         }
     }
+
 }

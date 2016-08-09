@@ -2,6 +2,7 @@ package com.wj.yuanbin.roll;
 
 import android.app.Activity;
 import android.os.Bundle;
+import android.os.Handler;
 import android.widget.TextView;
 
 import com.wj.yuanbin.rollbar.RollLayout;
@@ -32,7 +33,24 @@ public class MainActivity extends Activity {
                 textView.setText(getItem(position));
             }
         });
-        rollLayout.setState(RollLayout.START);
+        rollLayout.setCirculationTimes(3);
+        rollLayout.setCurrentPosition(3);
+//        rollLayout.start();
+//
+//        final Handler handler = new Handler();
+//
+//        handler.postDelayed(new Runnable() {
+//            @Override
+//            public void run() {
+//                rollLayout.stop();
+//                handler.postDelayed(new Runnable() {
+//                    @Override
+//                    public void run() {
+//                        rollLayout.resume();
+//                    }
+//                },2000);
+//            }
+//        },5000);
 
     }
 }
